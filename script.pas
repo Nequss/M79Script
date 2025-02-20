@@ -2,7 +2,6 @@
 //todo:
 // Checkpoints
 // ranking top10
-// my top
 // top3 cp times
 
 var
@@ -34,14 +33,22 @@ var i: integer;
 begin
   for i := 1 to 32 do
   begin
+    PlayerX[i] := 0;
+    PlayerY[i] := 0;
     Timer[i] := 0;
+    Alive[i] := false;
   end;
 end;
 
 procedure OnPlayerRespawn(ID: Byte);
 begin
-  Alive[ID] := true;
-  Timer[ID] := 0;
+  if((PlayerX[ID] = 0) and (PlayerY[ID] = 0)) then
+  begin
+    Alive[ID] := true;
+    Timer[ID] := 0;
+  end
+  else
+    MovePlayer(ID, PlayerX[ID], PlayerY[ID]);
 end;
 
 procedure OnJoinTeam(ID, Team: byte);
@@ -51,8 +58,11 @@ end;
 
 procedure OnPlayerKill(Killer, Victim: byte; Weapon: string);
 begin
-  Alive[Victim] := false;
-  Timer[Victim] := 0;
+  if((PlayerX[Victim] = 0) and (PlayerY[Victim] = 0)) then
+  begin
+    Alive[Victim] := false;
+    Timer[Victim] := 0;
+  end
 end;
 
 // Main loop
@@ -101,30 +111,32 @@ begin
   WriteConsole(0, 'Welcome to the [Freestyle] M79 Climb ' + IDToName(ID) + '! Use !help for available commands.', $EE81FAA1);
 end;
 
- procedure SendHighscore(ID: byte; Map: string; Time: LongInt);
- var json: string;
- begin
+// Saves the highscore to the highscore.json file, 
+// then the file is sent to the web page by vps server script 
+procedure SendHighscore(ID: byte; Map: string; Time: LongInt);
+var json: string;
+begin
   json := '{"Ip": "' + IDToIP(ID) + '", "Name": "' + IDToName(ID) + '", "Map": "' + Map + '", "Time": ' + IntToStr(Time) + '}';
   WriteFile('highscore.json', json);
- end;
+end;
 
- procedure OnFlagScore(ID: Byte; TeamFlag: byte);
- begin
+procedure OnFlagScore(ID: Byte; TeamFlag: byte);
+begin
   WriteConsole(0, IDToName(ID) + ' finished the map in ' + ReturnTimer(Timer[ID]), $EE81FAA1);
   SendHighscore(ID, CurrentMap, Timer[ID]);
   DoDamage(ID, 4000);
- end;
+end;
 
 
- procedure DisplayTop(Map: string);
- begin
+procedure DisplayTop(Map: string);
+begin
   // to do
- end;
+end;
 
- procedure DisplayMyTop(ID: byte; Map: string);
- begin
+procedure DisplayMyTop(ID: byte; Map: string);
+begin
 
- end;
+end;
 
 // Executes when a player speaks
 procedure OnPlayerSpeak(ID: Byte; Text: string);
@@ -141,18 +153,25 @@ begin
     '!save': begin
                 PlayerX[ID] := GetPlayerStat(ID, 'X');
                 PlayerY[ID] := GetPlayerStat(ID, 'Y');
+                SayToPlayer(ID, 'Location has been saved!');
              end;
     '!load': begin
                 MovePlayer(ID, PlayerX[ID], PlayerY[ID]);
+                SayToPlayer(ID, 'Loaded!');
              end;  
+    '!remove': begin
+                PlayerX[ID] := 0;
+                PlayerY[ID] := 0;
+                SayToPlayer(ID, 'Save/Load point has been removed!');
+                end;
     '!help': begin
-               WriteConsole(0, 'Available commands: !save, !load, !next, !nextmap, !nm', $EE81FAA1);
+               WriteConsole(0, 'Available commands: !save, !load, !remove, !next, !nextmap, !nm', $EE81FAA1);
              end; 
     '!top', '!top10', '!best', '!times': begin
-                                            DisplayTop10(CurrentMap);
+                                            DisplayTop(CurrentMap);
                                          end; 
     '!mytop', '!mybest', '!mytimes': begin
-                                       DisplayMyTop10(ID, CurrentMap);
+                                       DisplayMyTop(ID, CurrentMap);
                                      end;
   end;
 end;
