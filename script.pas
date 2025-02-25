@@ -20,7 +20,7 @@ var
   
   // New tracking variables
   MapFinishes: Array[1..32] of Integer; // Count of map finishes
-  RespawnCount: Array[1..32] of Integer; // Count of respawns
+  Visits: Array[1..32] of Integer; // Count of visits
 
 // Returns the timer in the format "Minutes:Seconds:Miliseconds" Value = Ticks
 function ReturnTimer(Ticks: LongInt): String;
@@ -59,7 +59,7 @@ begin
                 IntToStr(FlamerShotCount[ID]) + ',' + 
                 IntToStr(Timer[ID] div 60) + ',' +  // Convert ticks to seconds
                 IntToStr(MapFinishes[ID]) + ',' + 
-                IntToStr(RespawnCount[ID]);
+                IntToStr(Visits[ID]);
                 
   // Send player stats to the web service via TCP
   WriteLn(playerStats);
@@ -86,7 +86,7 @@ begin
     
     // Initialize new counters
     MapFinishes[i] := 0;
-    RespawnCount[i] := 0;
+    Visits[i] := 0;
   end;
 end;
 
@@ -107,7 +107,7 @@ begin
   
   // Don't reset these on team join - they persist for the session
   // MapFinishes[ID] := 0;
-  // RespawnCount[ID] := 0;
+  // Visits[ID] := 0;
 
   //Anti-bravo 
   if Team = 2 then
@@ -132,14 +132,11 @@ begin
   LastGrenadeAmount[ID] := 0;
   LastTotalAmmo[ID] := 0;
   MapFinishes[ID] := 0;
-  RespawnCount[ID] := 0;
+  Visits[ID] := 0;
 end;
 
 procedure OnPlayerRespawn(ID: Byte);
-begin
-  // Increment respawn counter
-  RespawnCount[ID] := RespawnCount[ID] + 1;
-  
+begin  
   // If player has no saved location, set alive to true and reset timer
   if((PlayerX[ID] = 0) and (PlayerY[ID] = 0)) then
   begin
