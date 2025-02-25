@@ -12,6 +12,16 @@ var
   DrawUI: Array[1..32] of Boolean; // Flags from drawing UI for specified player
   Speed: Array[1..32] of Extended; // Speed for each player
 
+  // Updated tracking variables
+  GrenadeCount: Array[1..32] of Integer; // Count of grenades used
+  FlamerShotCount: Array[1..32] of Integer; // Count of total flamer shots
+  LastGrenadeAmount: Array[1..32] of Byte; // Last known grenade amount
+  LastTotalAmmo: Array[1..32] of Byte; // Last known total ammo amount
+  
+  // New tracking variables
+  MapFinishes: Array[1..32] of Integer; // Count of map finishes
+  RespawnCount: Array[1..32] of Integer; // Count of respawns
+
 // Returns the timer in the format "Minutes:Seconds:Miliseconds" Value = Ticks
 function ReturnTimer(Ticks: LongInt): String;
 var
@@ -28,38 +38,108 @@ begin
   Result := IntToStr(Minutes) + ':' + IntToStr(Seconds) + ':' + IntToStr(Milliseconds);
 end;
 
-// Initialize the timer for Players
+
+procedure SendHighscore(ID: byte; Map: string; Time: LongInt);
+var highscore: string;
+begin
+  // Format: HS,127.0.0.1,John,M79_Map1,10000
+  highscore := 'H$,' + IDToIP(ID) + ',' + IDToName(ID) + ',' + Map + ',' + IntToStr(Time);
+
+  // Send highscore to the web page on docker via tcp
+  WriteLn(highscore);
+end;
+
+procedure SendPlayerStats(ID: byte);
+var playerStats: string;
+begin
+  // Format: PS,127.0.0.1,John,5,10,3600,2,8
+  // P$ = IP, Name, GrenadesThrown, FlamerShots, TimeSpentOnServer(in seconds), MapFinishes, Respawns
+  playerStats := 'P$,' + IDToIP(ID) + ',' + IDToName(ID) + ',' + 
+                IntToStr(GrenadeCount[ID]) + ',' + 
+                IntToStr(FlamerShotCount[ID]) + ',' + 
+                IntToStr(Timer[ID] div 60) + ',' +  // Convert ticks to seconds
+                IntToStr(MapFinishes[ID]) + ',' + 
+                IntToStr(RespawnCount[ID]);
+                
+  // Send player stats to the web service via TCP
+  WriteLn(playerStats);
+end;
+
+// Initialize stuff
 procedure Ini;
 var i: integer;
 begin
   for i := 1 to 32 do
   begin
+    // Initialize player prefs
     PlayerX[i] := 0;
     PlayerY[i] := 0;
     Timer[i] := 0;
     Alive[i] := false;
     DrawUI[i] := true;
+
+    // Initialize our updated counters
+    GrenadeCount[i] := 0;
+    FlamerShotCount[i] := 0;
+    LastGrenadeAmount[i] := 0;
+    LastTotalAmmo[i] := 0;
+    
+    // Initialize new counters
+    MapFinishes[i] := 0;
+    RespawnCount[i] := 0;
   end;
 end;
 
+
 procedure OnJoinTeam(ID, Team: byte);
 begin
+  // Reset player prefs
   Alive[ID] := true;
   Timer[ID] := 0;
   PlayerX[ID] := 0;
   PlayerY[ID] := 0;
+
+  // Reset grenade and flamer counters
+  GrenadeCount[ID] := 0;
+  FlamerShotCount[ID] := 0;
+  LastGrenadeAmount[ID] := 0;
+  LastTotalAmmo[ID] := 0;
+  
+  // Don't reset these on team join - they persist for the session
+  // MapFinishes[ID] := 0;
+  // RespawnCount[ID] := 0;
+
+  //Anti-bravo 
+  if Team = 2 then
+  begin
+    Command('/setteam1 ' + IntToStr(ID))
+  end;
 end;
 
 procedure OnLeaveGame(ID, Team: Byte; Kicked: Boolean);
 begin
+  SendPlayerStats(ID);
+
+  // Reset player prefs
   Alive[ID] := false;
   Timer[ID] := 0;
   PlayerX[ID] := 0;
   PlayerY[ID] := 0;
+
+  // Reset all counters
+  GrenadeCount[ID] := 0;
+  FlamerShotCount[ID] := 0;
+  LastGrenadeAmount[ID] := 0;
+  LastTotalAmmo[ID] := 0;
+  MapFinishes[ID] := 0;
+  RespawnCount[ID] := 0;
 end;
 
 procedure OnPlayerRespawn(ID: Byte);
 begin
+  // Increment respawn counter
+  RespawnCount[ID] := RespawnCount[ID] + 1;
+  
   // If player has no saved location, set alive to true and reset timer
   if((PlayerX[ID] = 0) and (PlayerY[ID] = 0)) then
   begin
@@ -86,31 +166,21 @@ end;
 // Executes when a player joins the game
 procedure OnJoinGame(ID: Byte; Team: Byte);
 begin
-  WriteConsole(0, 'Welcome to the [Freestyle] M79 Climb ' + IDToName(ID) + '! Use !help for available commands.', $EE81FAA1);
-  WriteConsole(0, 'Server is in development mode! Please stay tuned for leaderboard and more!', $EE81FAA1);
-  WriteConsole(0, 'Visit https://m79climb.nequs.space for more information!', $EE81FAA1);
-
-  //if(IDToName(ID) = 'Mayor') then
-  //  WriteConsole(ID, 'Mayor is not allowed to play! Change your nickname!', $EE81FAA1);
-end;
-
-procedure SendHighscore(ID: byte; Map: string; Time: LongInt);
-var highscore: string;
-begin
-  // Format: HS,127.0.0.1,John,M79_Map1,10000
-  highscore := 'H$,' + IDToIP(ID) + ',' + IDToName(ID) + ',' + Map + ',' + IntToStr(Time);
-
-  // Send highscore to the web page on docker via tcp
-  WriteLn(highscore);
+  WriteConsole(ID, 'Welcome to the [Freestyle] M79 Climb ' + IDToName(ID) + '!', $EE81FAA1);
+  WriteConsole(ID, 'Server is in development mode! Please stay tuned for leaderboard and more!', $EE81FAA1);
+  WriteConsole(ID, 'Visit https://m79climb.nequs.space for more information!', $EE81FAA1);
+  WriteConsole(ID, 'Type !ui to toggle UI! Use !help for available commands.', $EE81FAA1);
 end;
 
 procedure OnFlagScore(ID: Byte; TeamFlag: byte);
 var Text: string;
 begin
-  PlayerX[i] := 0;
-  PlayerY[i] := 0;
-  Timer[i] := 0;
-  Alive[i] := false;
+  // Increment map finishes counter
+  MapFinishes[ID] := MapFinishes[ID] + 1;
+  
+  PlayerX[ID] := 0;
+  PlayerY[ID] := 0;
+  Alive[ID] := false;
 
   Text := IDToName(ID) + ' finished the map in ' + ReturnTimer(Timer[ID]);
 
@@ -118,7 +188,10 @@ begin
   WriteLn(Text);
 
   SendHighscore(ID, CurrentMap, Timer[ID]);
+  SendPlayerStats(ID); // Also send player stats when they finish a map
   DoDamage(ID, 4000);
+
+  Timer[ID] := 0; // at the end reset timer
 end;
 
 procedure DisplayTop(Map: string);
@@ -182,7 +255,7 @@ begin
     
     '!help':
       begin
-        WriteConsole(0, 'Available commands: !save, !load, !remove, !v, !top, !mytop', $EE81FAA1);
+        WriteConsole(0, 'Available commands: !ui, !save, !load, !remove, !v, !top, !mytop', $EE81FAA1);
       end;
 
      '!ping':
@@ -204,7 +277,49 @@ begin
         end;
       end;
 
+    '!weaponstats':
+      begin
+        //To Do via website api
+      end;
+
   end;
+end;
+
+// Track weapon and granades usage and count total flamer shots + nades
+procedure TrackWeaponUsage(ID: Byte);
+var
+  CurrentGrenades, CurrentPrimaryAmmo, CurrentSecondaryAmmo, CurrentTotalAmmo: Byte;
+begin
+  if not Alive[ID] then Exit;
+  
+  // Get current amounts
+  CurrentGrenades := GetPlayerStat(ID, 'Grenades');
+  CurrentPrimaryAmmo := GetPlayerStat(ID, 'Ammo');
+  CurrentSecondaryAmmo := GetPlayerStat(ID, 'SecAmmo');
+  
+  // Calculate total ammo (max 2)
+  CurrentTotalAmmo := CurrentPrimaryAmmo + CurrentSecondaryAmmo;
+  if CurrentTotalAmmo > 2 then CurrentTotalAmmo := 2;
+  
+  // Check if total ammo decreased (a shot was fired)
+  if (LastTotalAmmo[ID] > CurrentTotalAmmo) and (LastTotalAmmo[ID] > 0) then
+  begin
+    // Count the difference as shots fired
+    FlamerShotCount[ID] := FlamerShotCount[ID] + (LastTotalAmmo[ID] - CurrentTotalAmmo);
+  end;
+  
+  // Update total ammo
+  LastTotalAmmo[ID] := CurrentTotalAmmo;
+  
+  // Check for grenade usage
+  if (LastGrenadeAmount[ID] > CurrentGrenades) and (LastGrenadeAmount[ID] > 0) then
+  begin
+    // Count the difference as grenades used
+    GrenadeCount[ID] := GrenadeCount[ID] + (LastGrenadeAmount[ID] - CurrentGrenades);
+  end;
+  
+  // Update grenade count
+  LastGrenadeAmount[ID] := CurrentGrenades;
 end;
 
 // Main loop
@@ -213,6 +328,7 @@ var
   S: integer;
   xSpeed: Extended;
   ySpeed: Extended;
+
 begin
   AppOnIdleTimer := 1; // Default = 60 = 1 second 
 
@@ -221,8 +337,8 @@ begin
     // Your code here
   end;
 
-  // Check every aprx. 5 minutes
-  if Ticks mod (3600 * 5) = 0 then
+  // Check every aprx. 2 minutes
+  if Ticks mod (3600 * 2) = 0 then
   begin
     WriteConsole(0, '!help for available commands!', $EE81FAA1);
     WriteConsole(0, 'Current Map: ' + CurrentMap + ' Next Map: ' + NextMap, $EE81FAA1);
@@ -236,6 +352,9 @@ begin
 
   for S := 1 to 32 do
   begin
+    // Track weapon usage every tick
+    TrackWeaponUsage(S);
+
     // Check if player is alive and if so calculate and draw timer
     if Alive[S] = true then
     begin
@@ -248,7 +367,6 @@ begin
       Speed[S] :=  100 * sqrt((xSpeed*xSpeed) + (ySpeed*ySpeed)); // Multiplied by 100 to make it more readable by players
       //Speed[S] := Round(Speed[S]);
 
-      
       if DrawUI[S] = true then
       begin
           DrawTextEx(S, 2, 'Time: ' + ReturnTimer(Timer[S]), 100, RGB(255,255,255), 0.07, 1, 100);
