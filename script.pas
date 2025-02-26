@@ -12,16 +12,13 @@ var
   DrawUI: Array[1..32] of Boolean; // Flags from drawing UI for specified player
   Speed: Array[1..32] of Extended; // Speed for each player
 
-  // Updated tracking variables
   GrenadeCount: Array[1..32] of Integer; // Count of grenades used
   FlamerShotCount: Array[1..32] of Integer; // Count of total flamer shots
   LastGrenadeAmount: Array[1..32] of Byte; // Last known grenade amount
   LastTotalAmmo: Array[1..32] of Byte; // Last known total ammo amount
-  
-  // New tracking variables
   MapFinishes: Array[1..32] of Integer; // Count of map finishes
-  Visits: Array[1..32] of Integer; // Count of visits
   Respawns: Array[1..32] of Integer; // Count of respawns
+  Playtime: Array[1..32] of Integer; // Count of playtime
 
 // Returns the timer in the format "Minutes:Seconds:Miliseconds" Value = Ticks
 function ReturnTimer(Ticks: LongInt): String;
@@ -54,12 +51,22 @@ procedure SendPlayerStats(ID: byte);
 var playerStats: string;
 begin
   // Format: PS,127.0.0.1,John,5,10,3600,2,8
-  // P$ = IP, Name, GrenadesThrown, FlamerShots, TimeSpentOnServer(in seconds), MapFinishes, Respawns
-  playerStats := 'P$,' + IDToIP(ID) + ',' + IDToName(ID) + ',' + 
+  // P$,
+  // IP, 
+  // Name,
+  // GrenadesThrown,
+  // FlamerShots,
+  // TimeSpentOnServer(in seconds),
+  // MapFinishes, 
+  // Respawns
+
+  playerStats := 'P$,' + 
+                IDToIP(ID) + ',' + 
+                IDToName(ID) + ',' + 
                 IntToStr(GrenadeCount[ID]) + ',' + 
                 IntToStr(FlamerShotCount[ID]) + ',' + 
-                IntToStr(Timer[ID] div 60) + ',' +  // Convert ticks to seconds
-                IntToStr(Visits[ID]) + ',' + 
+                IntToStr(Playtime[ID]) + ',' +  // Convert ticks to seconds
+                '1,' + //visited
                 IntToStr(Respawns[ID]);
                 
   // Send player stats to the web service via TCP
@@ -79,16 +86,14 @@ begin
     Alive[i] := false;
     DrawUI[i] := true;
 
-    // Initialize our updated counters
+    //stats
     GrenadeCount[i] := 0;
     FlamerShotCount[i] := 0;
     LastGrenadeAmount[i] := 0;
     LastTotalAmmo[i] := 0;
-    
-    // Initialize new counters
     MapFinishes[i] := 0;
-    Visits[i] := 0;
     Respawns[i] := 0;
+    Playtime[i] := 0;
   end;
 end;
 
@@ -109,7 +114,6 @@ begin
   
   // Don't reset these on team join - they persist for the session
   // MapFinishes[ID] := 0;
-  // Visits[ID] := 0;
   // Respawns[ID] := 0;
 
   //Anti-bravo 
@@ -135,8 +139,8 @@ begin
   LastGrenadeAmount[ID] := 0;
   LastTotalAmmo[ID] := 0;
   MapFinishes[ID] := 0;
-  Visits[ID] := 0;
   Respawns[ID] := 0;
+  Playtime[ID] := 0;
 end;
 
 procedure OnPlayerRespawn(ID: Byte);
@@ -210,7 +214,7 @@ var  //
   response: string;
 begin
   // https doesn't work
-  response := GetUrl('http://m79climb.nequs.space/api/times/' + IDToIP(ID) + '/' + IDToName(ID) + '/' + CurrentMap, + '/5');
+  response := GetUrl('http://m79climb.nequs.space/api/times/' + IDToIP(ID) + '/' + IDToName(ID) + '/' + CurrentMap + '/5');
   WriteConsole(0, response, $EA11F3A1);
 end;
 
@@ -328,13 +332,6 @@ var
 begin
   AppOnIdleTimer := 1; // Default = 60 = 1 second 
 
-   WriteConsole(1, 'Time: ' + GetPlayerStat(1, 'Time'), $EE81FAA1);
-
-  if Ticks mod 6 = 0 then  // Check every 100ms (1/10th of a second)
-  begin
-    // Your code here
-  end;
-
   // Check every aprx. 2 minutes
   if Ticks mod (3600 * 2) = 0 then
   begin
@@ -342,16 +339,15 @@ begin
     WriteConsole(0, 'Current Map: ' + CurrentMap + ' Next Map: ' + NextMap, $EE81FAA1);
   end;
 
-  // Check every 1 s
-  if Ticks mod 60 = 0 then
-  begin
-    // More code here
-  end;
-
   for S := 1 to 32 do
   begin
     // Track weapon usage every tick
     TrackWeaponUsage(S);
+
+    if Ticks mod 60 = 0 then  
+    begin
+      Playtime[S] := Playtime[S] + 1;
+    end;
 
     // Check if player is alive and if so calculate and draw timer
     if Alive[S] = true then
