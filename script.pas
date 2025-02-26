@@ -21,6 +21,7 @@ var
   // New tracking variables
   MapFinishes: Array[1..32] of Integer; // Count of map finishes
   Visits: Array[1..32] of Integer; // Count of visits
+  Respawns: Array[1..32] of Integer; // Count of respawns
 
 // Returns the timer in the format "Minutes:Seconds:Miliseconds" Value = Ticks
 function ReturnTimer(Ticks: LongInt): String;
@@ -58,8 +59,8 @@ begin
                 IntToStr(GrenadeCount[ID]) + ',' + 
                 IntToStr(FlamerShotCount[ID]) + ',' + 
                 IntToStr(Timer[ID] div 60) + ',' +  // Convert ticks to seconds
-                IntToStr(MapFinishes[ID]) + ',' + 
-                IntToStr(Visits[ID]);
+                IntToStr(Visits[ID]) + ',' + 
+                IntToStr(Respawns[ID]);
                 
   // Send player stats to the web service via TCP
   WriteLn(playerStats);
@@ -87,6 +88,7 @@ begin
     // Initialize new counters
     MapFinishes[i] := 0;
     Visits[i] := 0;
+    Respawns[i] := 0;
   end;
 end;
 
@@ -108,6 +110,7 @@ begin
   // Don't reset these on team join - they persist for the session
   // MapFinishes[ID] := 0;
   // Visits[ID] := 0;
+  // Respawns[ID] := 0;
 
   //Anti-bravo 
   if Team = 2 then
@@ -133,10 +136,12 @@ begin
   LastTotalAmmo[ID] := 0;
   MapFinishes[ID] := 0;
   Visits[ID] := 0;
+  Respawns[ID] := 0;
 end;
 
 procedure OnPlayerRespawn(ID: Byte);
 begin  
+  Respawns[ID] := Respawns[ID] + 1;
   // If player has no saved location, set alive to true and reset timer
   if((PlayerX[ID] = 0) and (PlayerY[ID] = 0)) then
   begin
@@ -196,16 +201,16 @@ var
   response: string; 
 begin
   // https doesn't work
-  response := GetUrl('http://m79climb.nequs.space/api/besttimes/' + CurrentMap + '/10');
+  response := GetUrl('http://m79climb.nequs.space/api/besttimes/' + CurrentMap + '/5');
   WriteConsole(0, response, $EA11F3A1);
 end;
 
 procedure DisplayMyTop(ID: byte; Map: string);
-var 
+var  //
   response: string;
 begin
   // https doesn't work
-  response := GetUrl('http://m79climb.nequs.space/api/times/' + IDToIP(ID) + '/' + IDToName(ID) + '/' + CurrentMap);
+  response := GetUrl('http://m79climb.nequs.space/api/times/' + IDToIP(ID) + '/' + IDToName(ID) + '/' + CurrentMap, + '/5');
   WriteConsole(0, response, $EA11F3A1);
 end;
 
@@ -273,12 +278,6 @@ begin
           WriteConsole(ID, 'UI enabled!', $EE81FAA1);
         end;
       end;
-
-    '!weaponstats':
-      begin
-        //To Do via website api
-      end;
-
   end;
 end;
 
@@ -328,6 +327,8 @@ var
 
 begin
   AppOnIdleTimer := 1; // Default = 60 = 1 second 
+
+   WriteConsole(1, 'Time: ' + GetPlayerStat(1, 'Time'), $EE81FAA1);
 
   if Ticks mod 6 = 0 then  // Check every 100ms (1/10th of a second)
   begin
