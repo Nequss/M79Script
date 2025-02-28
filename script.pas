@@ -87,7 +87,7 @@ begin
 
   playerStats := 'P$,' + 
                 IDToIP(ID) + ',' + 
-                ReplaceCommasWithDots(IDToIP(ID)) + ',' + 
+                ReplaceCommasWithDots(IDToName(ID)) + ',' + 
                 IntToStr(GrenadeCount[ID]) + ',' + 
                 IntToStr(FlamerShotCount[ID]) + ',' + 
                 IntToStr(Seconds) + ',' +  // Convert ticks to seconds
