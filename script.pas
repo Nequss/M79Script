@@ -36,6 +36,23 @@ begin
   Result := IntToStr(Minutes) + ':' + IntToStr(Seconds) + ':' + IntToStr(Milliseconds);
 end;
 
+// Function to replace commas with dots in a string
+function ReplaceCommasWithDots(const Input: string): string;
+var
+  i: Integer;
+  Output: string;
+begin
+  Output := '';
+  for i := 1 to Length(Input) do
+  begin
+    if Input[i] = ',' then
+      Output := Output + '.'
+    else
+      Output := Output + Input[i];
+  end;
+  Result := Output;
+end;
+
 
 procedure SendHighscore(ID: byte; Map: string; Time: LongInt);
 var highscore: string;
@@ -48,7 +65,9 @@ begin
 end;
 
 procedure SendPlayerStats(ID: byte);
-var playerStats: string;
+var 
+  playerStats: string;
+  TotalMilliseconds, Seconds : Integer;
 begin
   // Format: PS,127.0.0.1,John,5,10,3600,2,8
   // P$,
@@ -60,12 +79,18 @@ begin
   // MapFinishes, 
   // Respawns
 
+  // 60 ticks = 1000 milliseconds (1 second)
+  TotalMilliseconds := Playtime[ID] * (1000 div 60);
+
+  // Calculate seconds
+  Seconds := (TotalMilliseconds mod 60000) div 1000;
+
   playerStats := 'P$,' + 
                 IDToIP(ID) + ',' + 
-                IDToName(ID) + ',' + 
+                ReplaceCommasWithDots(IDToIP(ID)) + ',' + 
                 IntToStr(GrenadeCount[ID]) + ',' + 
                 IntToStr(FlamerShotCount[ID]) + ',' + 
-                IntToStr(Playtime[ID]) + ',' +  // Convert ticks to seconds
+                IntToStr(Seconds) + ',' +  // Convert ticks to seconds
                 '1,' + //visited
                 IntToStr(Respawns[ID]);
                 
@@ -200,6 +225,19 @@ begin
   Timer[ID] := 0; // at the end reset timer
 end;
 
+procedure OnMapChange(NewMap: string);
+var  
+  i: integer;
+begin
+  for i := 1 to 32 do
+  begin
+    // Reset player prefs
+    PlayerX[i] := 0;
+    PlayerY[i] := 0;
+    Timer[i] := 0;
+  end;
+end;
+
 procedure DisplayTop(Map: string);
 var
   response: string; 
@@ -217,6 +255,7 @@ begin
   response := GetUrl('http://m79climb.nequs.space/api/times/' + IDToIP(ID) + '/' + IDToName(ID) + '/' + CurrentMap + '/5');
   WriteConsole(0, response, $EA11F3A1);
 end;
+
 
 // Executes when a player speaks
 procedure OnPlayerSpeak(ID: Byte; Text: string);
@@ -344,10 +383,8 @@ begin
     // Track weapon usage every tick
     TrackWeaponUsage(S);
 
-    if Ticks mod 60 = 0 then  
-    begin
-      Playtime[S] := Playtime[S] + 1;
-    end;
+    // Increment playtime every tick
+    Playtime[S] := Playtime[S] + 1;
 
     // Check if player is alive and if so calculate and draw timer
     if Alive[S] = true then
