@@ -12,6 +12,7 @@ var
   DrawUI: Array[1..32] of Boolean; // Flags from drawing UI for specified player
   Speed: Array[1..32] of Extended; // Speed for each player
 
+  // Stats
   GrenadeCount: Array[1..32] of Integer; // Count of grenades used
   FlamerShotCount: Array[1..32] of Integer; // Count of total flamer shots
   LastGrenadeAmount: Array[1..32] of Byte; // Last known grenade amount
@@ -20,6 +21,47 @@ var
   Respawns: Array[1..32] of Integer; // Count of respawns
   Playtime: Array[1..32] of Integer; // Count of playtime
 
+  // Vote 
+  Voted: Array[1..32] of Boolean; // If player has voted 
+  VoteStarted: Boolean; // If vote has started
+
+// Function to calculate vote
+function CalculateVote() : Boolean;
+var 
+  i, VotesNeeded : Integer;
+begin
+  // Calculate votes needed to pass
+  // 1 div 2 = 0, 0 + 1 = 1
+  // 2 div 2 = 1, 1 + 1 = 2
+  // 3 div 2 = 1, 1 + 1 = 2
+  // 4 div 2 = 2, 2 + 1 = 3
+  // 5 div 2 = 2, 2 + 1 = 3
+  // 6 div 2 = 3, 3 + 1 = 4
+  // 7 div 2 = 3, 3 + 1 = 4
+  // 8 div 2 = 4, 4 + 1 = 5
+  // etc.
+
+  VotesNeeded := (AlphaPlayers div 2) + 1;
+
+  for i := 1 to 32 do
+  begin
+    // Check if player has voted
+    if Voted[i] = true then
+      VotesNeeded := VotesNeeded - 1;
+  end;
+
+  if VotesNeeded = 0 then
+  begin
+    VoteStarted := false;
+    Result := true;
+  end
+  else
+  begin
+    WriteConsole(0, 'Needed votes: ' + IntToStr(VotesNeeded), $EE81FAA1);
+    Result := false;
+  end;
+end;
+  
 // Returns the timer in the format "Minutes:Seconds:Miliseconds" Value = Ticks
 function ReturnTimer(Ticks: LongInt): String;
 var
@@ -53,6 +95,40 @@ begin
   Result := Output;
 end;
 
+// Function to split a string by new line (#10 character)
+function SplitByNewLine(Input: string): Array of String;
+var
+  substr: String;
+  i, count: Integer;
+  resultArray: Array of String;
+begin
+  substr := '';
+  count := 0;
+
+  for i := 1 to Length(Input) do
+  begin
+    if Input[i] = #10 then
+    begin
+      // Add the current substring to the result array 
+      SetLength(resultArray, count + 1);
+      resultArray[count] := substr;
+      
+      count := count + 1;
+      substr := '';  // Reset for next substring
+    end
+    else
+      substr := substr + Input[i];  // Append character to substring 
+  end;
+
+  // Add the last substring if it's not empty 
+  if substr <> '' then
+  begin
+    SetLength(resultArray, count + 1);
+    resultArray[count] := substr;
+  end;
+
+  Result := resultArray;
+end;
 
 procedure SendHighscore(ID: byte; Map: string; Time: LongInt);
 var highscore: string;
@@ -119,9 +195,12 @@ begin
     MapFinishes[i] := 0;
     Respawns[i] := 0;
     Playtime[i] := 0;
+
+    // Vote
+    Voted[i] := false;
+    VoteStarted := false;
   end;
 end;
-
 
 procedure OnJoinTeam(ID, Team: byte);
 begin
@@ -141,11 +220,15 @@ begin
   // MapFinishes[ID] := 0;
   // Respawns[ID] := 0;
 
-  //Anti-bravo 
+  // Anti-bravo 
   if Team = 2 then
-  begin
-    Command('/setteam1 ' + IntToStr(ID))
-  end;
+    Command('/setteam1 ' + IntToStr(ID));
+
+  // Vote
+  if VoteStarted = true then
+    if CalculateVote() then
+      Command('/nextmap');
+
 end;
 
 procedure OnLeaveGame(ID, Team: Byte; Kicked: Boolean);
@@ -166,6 +249,13 @@ begin
   MapFinishes[ID] := 0;
   Respawns[ID] := 0;
   Playtime[ID] := 0;
+
+  // Vote
+  Voted[ID] := false;
+
+  if VoteStarted = true then
+    if CalculateVote() then
+      Command('/nextmap')
 end;
 
 procedure OnPlayerRespawn(ID: Byte);
@@ -235,34 +325,72 @@ begin
     PlayerX[i] := 0;
     PlayerY[i] := 0;
     Timer[i] := 0;
+    
+    Voted[i] := false;
   end;
+
+  VoteStarted := false;
 end;
 
 procedure DisplayTop(Map: string);
 var
   response: string; 
+  records: Array of String;
+  i: integer;
 begin
   // https doesn't work
   response := GetUrl('http://m79climb.nequs.space/api/besttimes/' + CurrentMap + '/5');
-  WriteConsole(0, response, $EA11F3A1);
+  records := SplitByNewLine(response);
+
+  // Display top3 records colored
+  for i := 0 to Length(records) - 1 do
+  begin
+    if i = 0 then
+      WriteConsole(0, records[i], $FFFFF600)
+    else if i = 1 then
+      WriteConsole(0, records[i], $FF8C8C8C)
+    else if i = 2 then
+      WriteConsole(0, records[i], $FF925709)
+    else
+      WriteConsole(0, records[i], $EE81FAA1)
+  end;
 end;
 
 procedure DisplayMyTop(ID: byte; Map: string);
-var  //
+var  
   response: string;
+  records: Array of String;
+  i: integer;
 begin
   // https doesn't work
-  response := GetUrl('http://m79climb.nequs.space/api/times/' + IDToIP(ID) + '/' + IDToName(ID) + '/' + CurrentMap + '/5');
-  WriteConsole(0, response, $EA11F3A1);
-end;
+  response := GetUrl('http://m79climb.nequs.space/api/times/' + '127.0.0.1/' + IDToName(ID) + '/' + CurrentMap + '/5');
+  records := SplitByNewLine(response);
 
+  // Display top3 records colored
+  for i := 0 to Length(records) - 1 do
+  begin
+    if i = 0 then
+      WriteConsole(0, records[i], $FFFFF600)
+    else if i = 1 then
+      WriteConsole(0, records[i], $FF8C8C8C)
+    else if i = 2 then
+      WriteConsole(0, records[i], $FF925709)
+    else
+      WriteConsole(0, records[i], $EE81FAA1)
+  end;
+end;
 
 // Executes when a player speaks
 procedure OnPlayerSpeak(ID: Byte; Text: string);
 begin
   case lowercase(getpiece(Text, ' ', 0)) of 
-    '!v': 
-      Command('/nextmap');
+    '!v':
+    begin
+      Voted[ID] := true;
+
+      if CalculateVote() then
+        Command('/nextmap');
+    end;
 
     '!save': 
       begin
@@ -321,6 +449,7 @@ begin
           WriteConsole(ID, 'UI enabled!', $EE81FAA1);
         end;
       end;
+
   end;
 end;
 
@@ -386,6 +515,16 @@ begin
     // Increment playtime every tick
     Playtime[S] := Playtime[S] + 1;
 
+    // Every 1s
+    if(Ticks mod 60 = 0) then
+    begin
+      // Check if vote has started
+      if VoteStarted = true then
+      begin
+
+      end;
+    end;
+
     // Check if player is alive and if so calculate and draw timer
     if Alive[S] = true then
     begin
@@ -395,8 +534,7 @@ begin
       // This works because the speed is the length of the vector representing movement in both X and Y directions.
       xSpeed := GetPlayerStat(S, 'VelX');
       ySpeed := GetPlayerStat(S, 'VelY');
-      Speed[S] :=  100 * sqrt((xSpeed*xSpeed) + (ySpeed*ySpeed)); // Multiplied by 100 to make it more readable by players
-      //Speed[S] := Round(Speed[S]);
+      Speed[S] :=  100 * sqrt((xSpeed*xSpeed) + (ySpeed*ySpeed)); // Multiplied by 100 to make it more readable for players
 
       if DrawUI[S] = true then
       begin
