@@ -63,8 +63,10 @@ begin
   // Conclusion 
   if VotesNeeded = 0 then
   begin
-    VoteStartedRestart := false;  // Added missing semicolon
-    VoteStarted := false;
+    if VoteMode then
+      VoteStarted := false
+    else
+      VoteStartedRestart := false;
     Result := true;
   end
   else
@@ -297,11 +299,11 @@ begin
 
   if VoteStarted = true then
     if CalculateVote(true) then
-      Command('/nextmap')
+      Command('/nextmap');
 
   if VoteStartedRestart = true then
     if CalculateVote(false) then
-      Command('/nextmap ' + CurrentMap)
+      Command('/nextmap ' + CurrentMap);
 end;
 
 procedure OnPlayerRespawn(ID: Byte);
@@ -436,7 +438,7 @@ begin
     begin
       VoteStarted := True;
       Voted[ID] := true;
-
+      WriteConsole(0, IDToName(ID) + ' started vote to skip map! Type !v to vote!', $EE81FAA1);
       if CalculateVote(true) then
         Command('/nextmap');
     end;
@@ -445,9 +447,12 @@ begin
     begin
       VoteStartedRestart := true;
       VotedRestart[ID] := true;
-
+      WriteConsole(0, IDToName(ID) + ' started vote to restart map! Type !r to vote!', $EE81FAA1);
       if CalculateVote(false) then
-        Command('/nextmap ' + CurrentMap);
+      begin
+        WriteConsole(0, 'Vote passed! Restarting map...', $EE81FAA1);
+        Command('/restart');  // Use /restart instead of /nextmap
+      end;
     end;
 
     '!save': 
@@ -585,11 +590,7 @@ begin
     // Every 1s
     if(Ticks mod 60 = 0) then
     begin
-      // Check if vote has started
-      if VoteStarted = true then
-      begin
 
-      end;
     end;
 
     // Check if player is alive and if so calculate and draw timer
