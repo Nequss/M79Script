@@ -25,13 +25,8 @@ var
   Voted: Array[1..32] of Boolean; // If player has voted 
   VoteStarted: Boolean; // If vote has started
 
-  VotedRestart: Array[1..32] of Boolean; // If player has voted 
-  VoteStartedRestart: Boolean; // If vote has started
-
 // Function to calculate vote
-// VoteMode True - Skip the map
-// VoteMode False - Restart the map
-function CalculateVote(VoteMode: Boolean) : Boolean;
+function CalculateVote() : Boolean;
 var 
   i, VotesNeeded : Integer;
 begin
@@ -48,38 +43,23 @@ begin
 
   VotesNeeded := (AlphaPlayers div 2) + 1;
 
-  // Check if vote passed
   for i := 1 to 32 do
   begin
-    if VoteMode = true
-      if Voted[i] = true then
-        VotesNeeded := VotesNeeded - 1
-
-    if VoteMode = false
-      if VotedRestart[i] = true then
-        VotesNeeded := VotesNeeded - 1
+    // Check if player has voted
+    if Voted[i] = true then
+      VotesNeeded := VotesNeeded - 1;
   end;
 
-  // Conclusion 
   if VotesNeeded = 0 then
   begin
-    VoteStartedRestart := false
     VoteStarted := false;
     Result := true;
   end
   else
   begin
-    if VoteMode = true
-      if Voted[i] = true then
-        WriteConsole(0, 'Needed votes: ' + IntToStr(VotesNeeded) + ' type !v to skip!', $EE81FAA1);
-
-    if VoteMode = false
-      if VotedRestart[i] = true then
-        WriteConsole(0, 'Needed votes: ' + IntToStr(VotesNeeded)+ ' type !r to restart!', $EE81FAA1);
-
+    WriteConsole(0, 'Needed votes: ' + IntToStr(VotesNeeded), $EE81FAA1);
     Result := false;
   end;
-
 end;
   
 // Returns the timer in the format "Minutes:Seconds:Miliseconds" Value = Ticks
@@ -219,8 +199,6 @@ begin
     // Vote
     Voted[i] := false;
     VoteStarted := false;
-    VotedRestart[i] := false;
-    VoteStartedRestart := false;
   end;
 end;
 
@@ -244,22 +222,15 @@ begin
 
   // Anti-bravo 
   if Team = 2 then
-    Command('/setteam1 ' + IntToStr(ID));
+    Command('/setteam1 ' + IntToStr(ID));  // Added missing semicolon
 
-  // Vote
+  // Check vote status
   if VoteStarted = true then
-    if CalculateVote(true) then
-      Command('/nextmap')
-
-  if VoteStartedRestart = true then
-    if CalculateVote(false) then
-      Command('/nextmap ' + CurrentMap)
-
+    if CalculateVote() then
+      Command('/nextmap');
 end;
 
 procedure OnLeaveGame(ID, Team: Byte; Kicked: Boolean);
-var
-  i: integer;
 begin
   SendPlayerStats(ID);
 
@@ -280,30 +251,10 @@ begin
 
   // Vote
   Voted[ID] := false;
-  VotedRestart[ID] := false;
-
-  // Check if both votes are ongoing, then reset if true
-  if (VoteStarted = true) and (VoteStartedRestart = true) then
-  begin
-    VoteStarted := false;
-    VoteStartedRestart := false;
-
-    for i := 0 to 32 do
-    begin
-      Voted[i] = false;
-      VotedRestart[i] = false;
-    end;
-
-    WriteConsole(0, 'Votes reset, type !r or !v to start the vote again', $EE81FAA1);
-  end;
 
   if VoteStarted = true then
-    if CalculateVote(true) then
+    if CalculateVote() then
       Command('/nextmap')
-
-  if VoteStartedRestart = true then
-    if CalculateVote(false) then
-      Command('/nextmap ' + CurrentMap)
 end;
 
 procedure OnPlayerRespawn(ID: Byte);
@@ -375,12 +326,10 @@ begin
     Timer[i] := 0;
     
     Voted[i] := false;
-    VotedRestart[i] := false;
   end;
 
-  VoteStartedRestart := false;
   VoteStarted := false;
-  end;
+end;
 
 procedure DisplayTop(Map: string);
 var
@@ -413,7 +362,7 @@ var
   i: integer;
 begin
   // https doesn't work
-  response := GetUrl('http://m79climb.nequs.space/api/times/' + IDToName(ID) + '/' + CurrentMap + '/5');
+  response := GetUrl('http://m79climb.nequs.space/api/times/' + '127.0.0.1/' + IDToName(ID) + '/' + CurrentMap + '/5');
   records := SplitByNewLine(response);
 
   // Display top3 records colored
@@ -436,20 +385,10 @@ begin
   case lowercase(getpiece(Text, ' ', 0)) of 
     '!v':
     begin
-      VoteStarted := True;
       Voted[ID] := true;
 
-      if CalculateVote(true) then
+      if CalculateVote() then
         Command('/nextmap');
-    end;
-
-    '!r':
-    begin
-      VoteStartedRestart := true;
-      VotedRestart[ID] := true;
-
-      if CalculateVote(false) then
-        Command('/nextmap ' + CurrentMap);
     end;
 
     '!save': 
@@ -485,6 +424,11 @@ begin
       begin
         DisplayMyTop(ID, CurrentMap);
       end;
+    
+    '!help':
+      begin
+        WriteConsole(0, 'Available commands: !ui, !save, !load, !remove, !v, !top, !mytop', $EE81FAA1);
+      end;
 
      '!ping':
       begin
@@ -504,20 +448,6 @@ begin
           WriteConsole(ID, 'UI enabled!', $EE81FAA1);
         end;
       end;
-
-    '!help':
-    begin
-      WriteConsole(ID, 'Available commands:', $EE81FAA1);
-      WriteConsole(ID, '!ui - Toggle UI on/off', $EE81FAA1);
-      WriteConsole(ID, '!save - Save your current location', $EE81FAA1);
-      WriteConsole(ID, '!load - Load your saved location', $EE81FAA1);
-      WriteConsole(ID, '!remove - Remove your saved location', $EE81FAA1);
-      WriteConsole(ID, '!v - Start a vote for next map', $EE81FAA1);
-      WriteConsole(ID, '!r - Start a vote to restart the map', $EE81FAA1);
-      WriteConsole(ID, '!top - Show top players for current map', $EE81FAA1);
-      WriteConsole(ID, '!mytop - Show your best times for current map', $EE81FAA1);
-      WriteConsole(ID, '!ping - Show your current ping', $EE81FAA1);
-    end;
 
   end;
 end;
